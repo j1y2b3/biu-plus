@@ -14,6 +14,9 @@
 > - 全屏封面**统一使用 B 站展示封面**，并按图片实际比例自适应、不裁切
 > - 修复侧边栏拖拽条**遮挡滚动条**的问题
 
+> [!NOTE]
+> 本改版的功能改动均由 **AI（GitHub Copilot）（DeepSeek v4 flash）** 编写完成，包括多P播放、歌词偏移、播放稳定性、封面与 UI 修复等。🤖
+
 <p align="center">
   <img src="./screenshots/logo.svg" alt="Biu logo" width="120" />
 </p>
