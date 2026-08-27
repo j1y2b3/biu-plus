@@ -1,6 +1,6 @@
 import {
-  RiDiscLine,
-  RiDiscFill,
+  RiArticleLine,
+  RiArticleFill,
   RiUserFollowLine,
   RiUserFollowFill,
   RiFileDownloadLine,
@@ -17,10 +17,11 @@ import { type MenuItemProps } from "@/components/menu/menu-item";
 
 export const DefaultMenuList: (MenuItemProps & { needLogin?: boolean })[] = [
   {
-    title: "推荐音乐",
+    title: "动态",
     href: "/",
-    icon: RiDiscLine,
-    activeIcon: RiDiscFill,
+    needLogin: true,
+    icon: RiArticleLine,
+    activeIcon: RiArticleFill,
   },
   {
     title: "我的关注",

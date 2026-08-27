@@ -9,7 +9,6 @@ import History from "./pages/history";
 import Later from "./pages/later";
 import LocalMusicPage from "./pages/local-music";
 import MiniPlayer from "./pages/mini-player";
-import MusicRecommend from "./pages/music-recommend";
 import NotFound from "./pages/not-found";
 import Search from "./pages/search";
 import Settings from "./pages/settings";
@@ -23,7 +22,7 @@ const routes: RouteObject[] = [
     children: [
       {
         index: true,
-        element: <MusicRecommend />,
+        element: <DynamicFeed />,
       },
       {
         path: "later",
