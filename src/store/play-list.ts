@@ -607,7 +607,7 @@ export const usePlayList = create<State & Action>()(
                 updateMediaSession({
                   title: playItem.title,
                   artist: playItem.ownerName,
-                  cover: playItem.pageCover,
+                  cover: playItem.pageCover || playItem.cover,
                 });
               }
             }
@@ -1300,7 +1300,7 @@ usePlayList.subscribe(async (state, prevState) => {
             updateMediaSession({
               title: playItem.pageTitle || playItem.title,
               artist: playItem.ownerName,
-              cover: playItem.pageCover,
+              cover: playItem.pageCover || playItem.cover,
             });
 
             usePlayList.setState(state => {
@@ -1333,7 +1333,7 @@ usePlayList.subscribe(async (state, prevState) => {
               updateMediaSession({
                 title: firstMV.pageTitle || firstMV.title,
                 artist: firstMV.ownerName,
-                cover: firstMV.pageCover,
+                cover: firstMV.pageCover || firstMV.cover,
               });
 
               usePlayList.setState(state => {
@@ -1384,7 +1384,7 @@ usePlayList.subscribe(async (state, prevState) => {
           updateMediaSession({
             title: playItem.title,
             artist: playItem.ownerName,
-            cover: playItem.pageCover,
+            cover: playItem.pageCover || playItem.cover,
           });
 
           usePlayList.setState(state => {

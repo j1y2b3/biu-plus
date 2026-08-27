@@ -55,7 +55,7 @@ function getMainStateSnapshot(): MiniPlayerMainStateSnapshot {
   return {
     isSingle: list.length === 1,
     title: playItem?.pageTitle || playItem?.title,
-    cover: playItem?.pageCover || playItem?.cover,
+    cover: playItem?.cover || playItem?.pageCover,
     playId,
     isPlaying,
     currentTime: Number(currentTime ?? 0),

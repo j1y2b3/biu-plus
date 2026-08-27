@@ -17,7 +17,7 @@ const MusicDownloadButton = () => {
     await window.electron.addMediaDownloadTask({
       outputFileType: "audio",
       title: playItem?.pageTitle || playItem?.title || `audio-${Date.now()}`,
-      cover: playItem?.pageCover || playItem?.cover,
+      cover: playItem?.cover || playItem?.pageCover,
       bvid: playItem?.bvid,
       cid: playItem?.cid,
       sid: playItem?.type === "audio" ? playItem?.sid : undefined,
@@ -33,7 +33,7 @@ const MusicDownloadButton = () => {
     await window.electron.addMediaDownloadTask({
       outputFileType: "video",
       title: playItem?.pageTitle || playItem?.title || `video-${Date.now()}`,
-      cover: playItem?.pageCover || playItem?.cover,
+      cover: playItem?.cover || playItem?.pageCover,
       bvid: playItem?.bvid,
       cid: playItem?.cid,
     });
@@ -45,7 +45,7 @@ const MusicDownloadButton = () => {
   };
 
   const downloadCover = async () => {
-    const coverUrl = playItem?.pageCover || playItem?.cover;
+    const coverUrl = playItem?.cover || playItem?.pageCover;
 
     if (!coverUrl) {
       addToast({

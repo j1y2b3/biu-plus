@@ -5,5 +5,5 @@ export const getDisplayTitle = (data: PlayData): string => {
 };
 
 export const getDisplayCover = (data: PlayData): string | undefined => {
-  return data.pageCover || data.cover || undefined;
+  return data.cover || data.pageCover || undefined;
 };

@@ -30,7 +30,7 @@ const LeftControl = () => {
       <div data-id="full-screen-player-open" className="group relative flex-none cursor-pointer" onClick={open}>
         <Image
           radius="md"
-          src={playItem?.pageCover || playItem?.cover}
+          src={playItem?.cover || playItem?.pageCover}
           width={56}
           height={56}
           classNames={{

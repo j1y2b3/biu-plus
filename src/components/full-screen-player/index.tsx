@@ -62,6 +62,7 @@ const FullScreenPlayer = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const controlsRef = useRef<HTMLDivElement>(null);
   const [controlsHeight, setControlsHeight] = useState(80);
+  const [coverRatio, setCoverRatio] = useState<number | null>(null);
 
   const pageListRef = useRef<HTMLDivElement>(null);
   const hideUiTimeoutRef = useRef<number | null>(null);
@@ -132,7 +133,12 @@ const FullScreenPlayer = () => {
     scheduleHideUi(3000);
   };
 
-  const coverSrc = playItem?.pageCover || playItem?.cover;
+  // 优先使用 B 站展示的封面（cover=pic），而不是分P首帧（pageCover）
+  const coverSrc = playItem?.cover || playItem?.pageCover;
+
+  useEffect(() => {
+    setCoverRatio(null);
+  }, [coverSrc]);
   const { effectsProfile, bgLayerA, bgLayerB, activeBgLayer, cssVars } = useGlassmorphism(
     coverSrc,
     primaryColor,
@@ -184,8 +190,11 @@ const FullScreenPlayer = () => {
 
   if (!playItem) return null;
 
-  const coverWidth = Math.max(260, Math.min(windowWidth * 0.7, windowHeight * 0.48, 520));
-  const coverHeight = coverWidth * 0.75;
+  const maxCoverWidth = Math.max(260, Math.min(windowWidth * 0.7, windowHeight * 0.48, 520));
+  const maxCoverHeight = maxCoverWidth * 0.5625;
+  // 按图片实际比例自适应盒子，避免固定 16:9 留白导致圆角/阴影异常
+  const coverWidth = coverRatio ? Math.min(maxCoverWidth, maxCoverHeight * coverRatio) : maxCoverWidth;
+  const coverHeight = coverRatio ? coverWidth / coverRatio : maxCoverHeight;
   const waveformWidth = Math.min(640, Math.max(400, Math.round(windowWidth * 0.5)));
   const waveformBarCount = Math.max(48, Math.min(128, Math.round(waveformWidth / 7.5)));
 
@@ -336,16 +345,22 @@ const FullScreenPlayer = () => {
                       src={coverSrc}
                       radius="lg"
                       className="transition-shadow ease-out"
+                      onLoad={e => {
+                        const img = e.currentTarget as HTMLImageElement;
+                        if (img?.naturalWidth && img?.naturalHeight) {
+                          setCoverRatio(img.naturalWidth / img.naturalHeight);
+                        }
+                      }}
                       classNames={{
                         wrapper: "pointer-events-none",
-                        img: "w-full h-full object-cover select-none pointer-events-none",
+                        img: "w-full h-full object-contain select-none pointer-events-none",
                       }}
                       style={{
                         width: coverWidth,
                         height: coverHeight,
                         boxShadow: `0 28px 90px -35px rgb(var(--glow-rgb) / 0.55), 0 10px 32px -18px rgb(0 0 0 / 0.55)`,
                         transition: `box-shadow ${effectsProfile.transitionMs}ms ease`,
-                        aspectRatio: "4 / 3",
+                        aspectRatio: "16 / 9",
                       }}
                     />
                   </div>
