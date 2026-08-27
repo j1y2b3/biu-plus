@@ -220,6 +220,13 @@ const STALL_TIMEOUT = 8000;
 let audioErrorRetryCount = 0;
 let stallTimerId: number | null = null;
 
+/** 获取播放链接失败时的最大重试次数 */
+const AUDIO_FETCH_RETRY = 2;
+/** 获取播放链接重试间隔（ms） */
+const AUDIO_FETCH_RETRY_DELAY = 1000;
+
+const wait = (ms: number) => new Promise<void>(resolve => window.setTimeout(resolve, ms));
+
 const updatePlaybackState = () => {
   if ("mediaSession" in navigator) {
     navigator.mediaSession.playbackState = audio.paused ? "paused" : "playing";
@@ -317,7 +324,20 @@ export const usePlayList = create<State & Action>()(
         }
 
         if (currentPlayItem?.type === "mv" && currentPlayItem?.bvid && currentPlayItem?.cid) {
-          const mvPlayData = await getDashUrl(currentPlayItem.bvid, currentPlayItem.cid);
+          // 获取播放链接失败时自动重试，避免“下一首播放不了”
+          let mvPlayData: Awaited<ReturnType<typeof getDashUrl>> | undefined;
+          for (let attempt = 0; attempt <= AUDIO_FETCH_RETRY; attempt += 1) {
+            mvPlayData = await getDashUrl(currentPlayItem.bvid, currentPlayItem.cid);
+            if (mvPlayData?.audioUrl) {
+              break;
+            }
+            if (attempt < AUDIO_FETCH_RETRY) {
+              log.warn(`[播放] 获取视频音频链接失败，第 ${attempt + 1} 次重试`, {
+                title: currentPlayItem.title,
+              });
+              await wait(AUDIO_FETCH_RETRY_DELAY);
+            }
+          }
           if (mvPlayData?.audioUrl) {
             if (audio.src !== mvPlayData.audioUrl) {
               audio.src = mvPlayData.audioUrl;
@@ -348,7 +368,20 @@ export const usePlayList = create<State & Action>()(
         }
 
         if (currentPlayItem?.type === "audio" && currentPlayItem?.sid) {
-          const musicPlayData = await getAudioUrl(currentPlayItem.sid);
+          // 获取播放链接失败时自动重试，避免“下一首播放不了”
+          let musicPlayData: Awaited<ReturnType<typeof getAudioUrl>> | undefined;
+          for (let attempt = 0; attempt <= AUDIO_FETCH_RETRY; attempt += 1) {
+            musicPlayData = await getAudioUrl(currentPlayItem.sid);
+            if (musicPlayData?.audioUrl) {
+              break;
+            }
+            if (attempt < AUDIO_FETCH_RETRY) {
+              log.warn(`[播放] 获取音频链接失败，第 ${attempt + 1} 次重试`, {
+                title: currentPlayItem.title,
+              });
+              await wait(AUDIO_FETCH_RETRY_DELAY);
+            }
+          }
           if (musicPlayData?.audioUrl) {
             if (audio.src !== musicPlayData.audioUrl) {
               audio.src = musicPlayData.audioUrl;
