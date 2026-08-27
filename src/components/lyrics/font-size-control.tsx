@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger, Slider } from "@heroui/react";
-import { RiFontSize } from "@remixicon/react";
+import { RiFontSize, RiResetLeftLine } from "@remixicon/react";
 
 import IconButton from "../icon-button";
 
@@ -9,11 +9,20 @@ interface FontSizeControlProps {
   value: number;
   min?: number;
   max?: number;
+  /** 默认字号，恢复默认时使用 */
+  defaultValue?: number;
   onChange: (next: number) => void;
   onOpenChange?: (open: boolean) => void;
 }
 
-const FontSizeControl = ({ value, min = 12, max = 48, onChange, onOpenChange }: FontSizeControlProps) => {
+const FontSizeControl = ({
+  value,
+  min = 12,
+  max = 48,
+  defaultValue = 20,
+  onChange,
+  onOpenChange,
+}: FontSizeControlProps) => {
   const [open, setOpen] = useState(false);
   const step = 1;
 
@@ -64,6 +73,14 @@ const FontSizeControl = ({ value, min = 12, max = 48, onChange, onOpenChange }: 
             }}
           />
           <span className="text-foreground/60 text-[10px] font-bold whitespace-nowrap">{Math.round(value)}px</span>
+          <button
+            type="button"
+            aria-label="重置字体大小"
+            onClick={() => onChange(defaultValue)}
+            className="text-foreground/50 hover:text-foreground mt-1 rounded-full p-1 transition-colors"
+          >
+            <RiResetLeftLine size={14} />
+          </button>
         </div>
       </PopoverContent>
     </Popover>
