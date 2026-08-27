@@ -141,5 +141,15 @@
     "*.json": "prettier --write"
   },
   "packageManager": "pnpm@10.24.0",
-  "productName": "Biu"
+  "productName": "Biu",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@heroui/shared-utils",
+      "core-js",
+      "electron",
+      "electron-winstaller",
+      "esbuild",
+      "unrs-resolver"
+    ]
+  }
 }
