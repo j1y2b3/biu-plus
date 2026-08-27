@@ -150,7 +150,7 @@ const SideNav = () => {
       >
         <Logo isCollapsed={isCollapsedVisual} />
         <ScrollContainer
-          className={clx("min-h-0 flex-1 pb-2", {
+          className={clx("mr-2 min-h-0 flex-1 pb-2", {
             "px-4": !isCollapsedVisual,
             "overflow-hidden": isDragging,
           })}
