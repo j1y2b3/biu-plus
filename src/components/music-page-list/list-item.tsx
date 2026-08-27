@@ -22,7 +22,7 @@ interface Props {
 }
 
 const ListItem = ({ data, isActive, onPressItem, hideCover, className, titleClassName }: Props) => {
-  const playListItem = usePlayList(state => state.playListItem);
+  const playPageItem = usePlayList(state => state.playPageItem);
 
   return (
     <Button
@@ -33,7 +33,7 @@ const ListItem = ({ data, isActive, onPressItem, hideCover, className, titleClas
       variant={isActive ? "flat" : "light"}
       color={isActive ? "primary" : "default"}
       onPress={() => {
-        playListItem(data.id);
+        playPageItem(data);
         onPressItem?.();
       }}
       className={twMerge(

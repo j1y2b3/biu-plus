@@ -29,11 +29,16 @@ const MusicPageList = ({
 }: Props) => {
   const playId = usePlayList(s => s.playId);
   const list = usePlayList(s => s.list);
+  const currentVideoPages = usePlayList(s => s.currentVideoPages);
 
   const pages = useMemo(() => {
     const currentItem = list.find(item => item.id === playId);
+    // 有当前视频的分P缓存且与当前视频匹配时，展示全部分P（未加入播放列表的也能看到）
+    if (currentVideoPages?.length && currentItem?.bvid && currentVideoPages[0]?.bvid === currentItem.bvid) {
+      return currentVideoPages;
+    }
     return list.filter(item => item.bvid === currentItem?.bvid);
-  }, [playId, list]);
+  }, [currentVideoPages, list, playId]);
 
   const filteredPages = useMemo(() => {
     if (!searchKeyword) return pages;
@@ -57,7 +62,14 @@ const MusicPageList = ({
         </div>
       }
       renderItem={item => {
-        const isActive = item.id === playId;
+        const currentItem = list.find(i => i.id === playId);
+        const isActive = Boolean(
+          currentItem &&
+          currentItem.bvid === item.bvid &&
+          (currentItem.cid !== undefined && item.cid !== undefined
+            ? currentItem.cid === item.cid
+            : currentItem.id === item.id),
+        );
         return (
           <ListItem
             key={item.id}

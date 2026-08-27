@@ -134,6 +134,7 @@ describe("play-list store", () => {
     const { getWebInterfaceView } = await import("@/service/web-interface-view");
     const pages = await getWebInterfaceView({ bvid: mv.bvid as string });
     usePlayList.setState(() => ({
+      playMode: PlayMode.Random,
       list: pages.data.pages.map(p => ({
         id: `${p.page}-id`,
         type: "mv",
@@ -153,7 +154,6 @@ describe("play-list store", () => {
       })),
       playId: "1-id",
     }));
-    s.togglePlayMode();
     s.setShouldKeepPagesOrderInRandomPlayMode(true);
     await s.next();
     expect(usePlayList.getState().playId).toBe("2-id");
@@ -223,5 +223,37 @@ describe("play-list store", () => {
 
     await s.addToNext({ type: "mv", bvid: "BV_fail", title: "fail" });
     expect(usePlayList.getState().list.length).toBe(1);
+  });
+
+  test("next skips unadded pages of the same video (default only P1)", async () => {
+    const s = usePlayList.getState();
+    await s.init();
+    // 模拟旧的展开结果：同一视频 P1/P2 都在列表中，且 P2 未手动添加
+    usePlayList.setState(() => ({
+      playMode: PlayMode.Loop,
+      list: [
+        { id: "p1", type: "mv", bvid: "BVx", cid: "11", pageIndex: 1, title: "mv-title" },
+        { id: "p2", type: "mv", bvid: "BVx", cid: "12", pageIndex: 2, title: "mv-title" },
+        { id: "b1", type: "audio", sid: 1, title: "a1" },
+      ],
+      playId: "p1",
+    }));
+    await s.next();
+    expect(usePlayList.getState().playId).toBe("b1");
+  });
+
+  test("next plays manually added page of the same video", async () => {
+    const s = usePlayList.getState();
+    await s.init();
+    usePlayList.setState(() => ({
+      playMode: PlayMode.Loop,
+      list: [
+        { id: "p1", type: "mv", bvid: "BVx", cid: "11", pageIndex: 1, title: "mv-title" },
+        { id: "p2", type: "mv", bvid: "BVx", cid: "12", pageIndex: 2, title: "mv-title", manuallyAdded: true },
+      ],
+      playId: "p1",
+    }));
+    await s.next();
+    expect(usePlayList.getState().playId).toBe("p2");
   });
 });

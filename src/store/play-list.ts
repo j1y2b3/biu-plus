@@ -61,6 +61,8 @@ export interface PlayData {
   isDolby?: boolean;
   /** 来源 */
   source?: "local" | "online";
+  /** 是否由用户从分集列表手动加入（用于区分默认只播P1与手动添加的分P） */
+  manuallyAdded?: boolean;
 }
 
 interface State {
@@ -84,6 +86,8 @@ interface State {
   nextId?: string;
   /** 是否在随机播放模式下保持视频分集顺序 */
   shouldKeepPagesOrderInRandomPlayMode: boolean;
+  /** 当前视频的全部分集缓存（供分集列表展示与按需添加） */
+  currentVideoPages?: PlayData[];
 }
 
 export interface PlayItem {
@@ -111,6 +115,8 @@ interface Action {
   init: VoidFunction;
   play: (params: PlayItem) => Promise<void>;
   playListItem: (id: string) => Promise<void>;
+  /** 播放指定分集：已在播放列表则切换，否则按需加入并播放 */
+  playPageItem: (item: PlayData) => void;
   playList: (items: PlayItem[]) => Promise<void>;
   addToNext: (item: PlayItem) => void;
   addList: (items: PlayItem[]) => void;
@@ -558,8 +564,50 @@ export const usePlayList = create<State & Action>()(
           const currentItem = list?.find(item => item.id === playId);
           const sanitizedTitle = sanitizeTitle(title);
           const candidate = { type, bvid, sid, source, id };
+          const isLocal = source === "local";
 
-          // 当前正在播放，如果暂停了则播放
+          // 多P视频：始终重置到第一个分P（P1），并清理播放列表中该视频的其它分P。
+          // 即使当前正播的是同一视频的P2/Pn（旧残留或手动添加），点播也会回到P1，
+          // 避免默认连播/停留在伴奏等分集。
+          if (type === "mv" && bvid && !isLocal) {
+            // 当前正播同一视频的P1且仅需恢复播放时，清理其它分P后恢复
+            const isCurrentP1 = currentItem && isSame(currentItem, candidate) && currentItem.pageIndex === 1;
+            if (isCurrentP1) {
+              set(state => {
+                state.list = state.list.filter(
+                  item => !(item.type === "mv" && item.bvid === bvid) || item.id === currentItem.id,
+                );
+                if (state.nextId && !state.list.some(item => item.id === state.nextId)) {
+                  state.nextId = undefined;
+                }
+              });
+              if (audio.paused) {
+                await ensureAudioSrcValid();
+                await playAudioSafely();
+              }
+              return;
+            }
+
+            const mvPages = await getMVData(bvid);
+            set(state => {
+              state.currentVideoPages = mvPages;
+            });
+            if (mvPages.length === 0) {
+              toastError("播放失败：无法获取播放信息");
+              return;
+            }
+            set(state => {
+              state.list = state.list.filter(item => !(item.type === "mv" && item.bvid === bvid));
+              state.list.push(mvPages[0]);
+              state.playId = mvPages[0].id;
+              if (state.nextId && !state.list.some(item => item.id === state.nextId)) {
+                state.nextId = undefined;
+              }
+            });
+            return;
+          }
+
+          // 当前正在播放（音频/本地等），如果暂停了则播放
           if (isSame(currentItem, candidate)) {
             if (audio.paused) {
               await ensureAudioSrcValid();
@@ -568,7 +616,7 @@ export const usePlayList = create<State & Action>()(
             return;
           }
 
-          // 列表已存在
+          // 列表已存在（音频/本地等）
           const existItem = list?.find(item => isSame(item, candidate));
           if (existItem) {
             set({ playId: existItem.id });
@@ -581,40 +629,33 @@ export const usePlayList = create<State & Action>()(
             return;
           }
 
-          const isLocal = source === "local";
-          // 新添加项
-          let playItem: PlayData[] =
-            isLocal && id
-              ? [
-                  {
-                    id,
-                    type,
-                    source,
-                    audioUrl,
-                    title: sanitizedTitle,
-                  },
-                ]
-              : [
-                  {
-                    id: idGenerator(),
-                    type,
-                    bvid,
-                    sid,
-                    title: sanitizedTitle,
-                    cover: cover ? formatUrlProtocol(cover) : undefined,
-                    ownerName,
-                    ownerMid,
-                  },
-                ];
-          // 补充缺失信息
-          if (!isLocal && (!cover || !ownerName || !ownerMid)) {
-            if (type === "mv" && bvid) {
-              playItem = await getMVData(bvid);
-            }
+          let playItem: PlayData[];
 
-            if (type === "audio" && sid) {
-              playItem = await getAudioData(sid);
-            }
+          if (isLocal && id) {
+            playItem = [
+              {
+                id,
+                type,
+                source,
+                audioUrl,
+                title: sanitizedTitle,
+              },
+            ];
+          } else if (type === "audio" && sid && (!cover || !ownerName || !ownerMid)) {
+            playItem = await getAudioData(sid);
+          } else {
+            playItem = [
+              {
+                id: idGenerator(),
+                type,
+                bvid,
+                sid,
+                title: sanitizedTitle,
+                cover: cover ? formatUrlProtocol(cover) : undefined,
+                ownerName,
+                ownerMid,
+              },
+            ];
           }
 
           const nextPlayItem = playItem[0];
@@ -633,11 +674,38 @@ export const usePlayList = create<State & Action>()(
             return;
           }
 
+          const item = get().list.find(i => i.id === id);
           set(state => {
             state.playId = id;
             if (state.nextId === id) {
               state.nextId = undefined;
             }
+          });
+
+          // 切换到其它多P视频时刷新分集缓存，保证分集列表完整
+          if (item?.type === "mv" && item?.bvid && get().currentVideoPages?.[0]?.bvid !== item.bvid) {
+            const mvPages = await getMVData(item.bvid);
+            set(state => {
+              state.currentVideoPages = mvPages;
+            });
+          }
+        },
+        playPageItem: item => {
+          const { list } = get();
+          // 已在播放列表中则直接切换，否则按需加入并播放
+          const exist = list.find(i =>
+            i.source === "local"
+              ? Boolean(i.id) && i.id === item.id
+              : i.type === item.type && i.bvid === item.bvid && i.cid === item.cid,
+          );
+          if (exist) {
+            set({ playId: exist.id });
+            return;
+          }
+          const newItem = { ...item, id: idGenerator(), manuallyAdded: true };
+          set(state => {
+            state.list.push(newItem);
+            state.playId = newItem.id;
           });
         },
         playList: async items => {
@@ -650,6 +718,7 @@ export const usePlayList = create<State & Action>()(
           set(state => {
             state.list = newList;
             state.playId = newList[0].id;
+            state.currentVideoPages = undefined;
           });
         },
         next: async () => {
@@ -672,7 +741,29 @@ export const usePlayList = create<State & Action>()(
           }
 
           const currentIndex = list.findIndex(item => item.id === playId);
-          const nextIndex = (currentIndex + 1) % list.length;
+          // 计算“下一首”索引：默认跳过同一多P视频中未手动添加的分P（如伴奏），
+          // 避免旧的展开结果/持久化残留导致自动连播
+          const nextIndex = (() => {
+            const currentItem = list[currentIndex];
+            const total = list.length;
+            let index = (currentIndex + 1) % total;
+            let guard = 0;
+            while (guard < total) {
+              const candidate = list[index];
+              const isUnaddedPage =
+                currentItem?.type === "mv" &&
+                candidate?.type === "mv" &&
+                candidate.bvid === currentItem.bvid &&
+                candidate.cid !== currentItem.cid &&
+                !candidate.manuallyAdded;
+              if (!isUnaddedPage) {
+                return index;
+              }
+              index = (index + 1) % total;
+              guard += 1;
+            }
+            return (currentIndex + 1) % total;
+          })();
           switch (playMode) {
             case PlayMode.Sequence:
             case PlayMode.Single:
@@ -775,42 +866,45 @@ export const usePlayList = create<State & Action>()(
             return;
           }
 
-          let nextPlayItem: PlayData[] =
-            source === "local" && id
-              ? [
-                  {
-                    id,
-                    type,
-                    bvid,
-                    sid,
-                    source,
-                    audioUrl,
-                    title: sanitizedTitle,
-                    cover: cover ? formatUrlProtocol(cover) : undefined,
-                    ownerName,
-                    ownerMid,
-                  },
-                ]
-              : [
-                  {
-                    id: idGenerator(),
-                    type,
-                    bvid,
-                    sid,
-                    title: sanitizedTitle,
-                    cover: cover ? formatUrlProtocol(cover) : undefined,
-                    ownerName,
-                    ownerMid,
-                  },
-                ];
-          if (source !== "local" && (!cover || !ownerName || !ownerMid)) {
-            if (type === "mv" && bvid) {
-              nextPlayItem = await getMVData(bvid);
-            }
+          let nextPlayItem: PlayData[];
 
-            if (type === "audio" && sid) {
-              nextPlayItem = await getAudioData(sid);
-            }
+          if (source === "local" && id) {
+            nextPlayItem = [
+              {
+                id,
+                type,
+                bvid,
+                sid,
+                source,
+                audioUrl,
+                title: sanitizedTitle,
+                cover: cover ? formatUrlProtocol(cover) : undefined,
+                ownerName,
+                ownerMid,
+              },
+            ];
+          } else if (type === "mv" && bvid) {
+            // 多P视频：默认只加入第一个分P，其余分P在分集列表中按需添加
+            const mvPages = await getMVData(bvid);
+            set(state => {
+              state.currentVideoPages = mvPages;
+            });
+            nextPlayItem = mvPages.length > 0 ? [mvPages[0]] : [];
+          } else if (type === "audio" && sid && (!cover || !ownerName || !ownerMid)) {
+            nextPlayItem = await getAudioData(sid);
+          } else {
+            nextPlayItem = [
+              {
+                id: idGenerator(),
+                type,
+                bvid,
+                sid,
+                title: sanitizedTitle,
+                cover: cover ? formatUrlProtocol(cover) : undefined,
+                ownerName,
+                ownerMid,
+              },
+            ];
           }
 
           if (!nextPlayItem || nextPlayItem.length === 0) {
@@ -879,7 +973,12 @@ export const usePlayList = create<State & Action>()(
           });
         },
         delPage: async id => {
-          if (get().list.length === 1) {
+          const { list } = get();
+          if (!list.some(item => item.id === id)) {
+            return;
+          }
+
+          if (list.length === 1) {
             get().clear();
             return;
           }
@@ -953,6 +1052,7 @@ export const usePlayList = create<State & Action>()(
             state.list = [];
             state.playId = undefined;
             state.nextId = undefined;
+            state.currentVideoPages = undefined;
           });
           usePlayProgress.getState().setCurrentTime(0);
         },
