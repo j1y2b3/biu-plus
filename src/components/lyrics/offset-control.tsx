@@ -1,23 +1,84 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import { Popover, PopoverContent, PopoverTrigger, Slider } from "@heroui/react";
-import { RiTimeLine } from "@remixicon/react";
+import { Popover, PopoverContent, PopoverTrigger } from "@heroui/react";
+import { RiArrowDownSLine, RiArrowUpSLine, RiResetLeftLine, RiTimeLine } from "@remixicon/react";
 
 import IconButton from "../icon-button";
 
 interface OffsetControlProps {
   value: number;
-  min?: number;
-  max?: number;
+  step?: number;
   onChange: (next: number) => void;
   onOpenChange?: (open: boolean) => void;
 }
 
+const DEFAULT_STEP = 100;
+const REPEAT_INTERVAL = 80; // 长按箭头时连续调整的间隔（ms）
+
 const formatLabel = (ms: number) => (ms >= 0 ? `+${ms}` : `${ms}`);
 
-const OffsetControl = ({ value, min = -5000, max = 5000, onChange, onOpenChange }: OffsetControlProps) => {
+const OffsetControl = ({ value, step = DEFAULT_STEP, onChange, onOpenChange }: OffsetControlProps) => {
   const [open, setOpen] = useState(false);
-  const step = 50;
+  const valueRef = useRef(value);
+  const repeatTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
+
+  const stopRepeat = useCallback(() => {
+    if (repeatTimerRef.current !== null) {
+      window.clearInterval(repeatTimerRef.current);
+      repeatTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => stopRepeat, [stopRepeat]);
+
+  const adjust = useCallback(
+    (delta: number) => {
+      const next = valueRef.current + delta;
+      valueRef.current = next;
+      onChange(next);
+    },
+    [onChange],
+  );
+
+  const startRepeat = useCallback(
+    (delta: number) => {
+      stopRepeat();
+      repeatTimerRef.current = window.setInterval(() => adjust(delta), REPEAT_INTERVAL);
+    },
+    [adjust, stopRepeat],
+  );
+
+  const handlePointerDown = useCallback(
+    (delta: number) => (event: React.PointerEvent<HTMLElement>) => {
+      event.preventDefault();
+      adjust(delta);
+      startRepeat(delta);
+    },
+    [adjust, startRepeat],
+  );
+
+  const handlePointerEnd = useCallback(() => {
+    stopRepeat();
+  }, [stopRepeat]);
+
+  const handleKeyDown = useCallback(
+    (delta: number) => (event: React.KeyboardEvent<HTMLElement>) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        adjust(delta);
+      }
+    },
+    [adjust],
+  );
+
+  const handleReset = useCallback(() => {
+    valueRef.current = 0;
+    onChange(0);
+  }, [onChange]);
 
   const handleOpenChange = useCallback(
     (next: boolean) => {
@@ -48,24 +109,42 @@ const OffsetControl = ({ value, min = -5000, max = 5000, onChange, onOpenChange 
         </IconButton>
       </PopoverTrigger>
       <PopoverContent className="px-3 py-2">
-        <div className="flex flex-col items-center gap-2">
-          <Slider
-            aria-label="调整歌词偏移"
-            minValue={min}
-            maxValue={max}
-            step={step}
-            value={value}
-            onChange={v => onChange(v as number)}
+        <div className="flex flex-col items-center gap-1">
+          <IconButton
             size="sm"
-            color="primary"
-            orientation="vertical"
-            className="h-32"
-            classNames={{
-              track: "w-1",
-              thumb: "after:hidden",
-            }}
-          />
-          <span className="text-foreground/60 text-[10px] font-bold whitespace-nowrap">{formatLabel(value)} ms</span>
+            variant="light"
+            aria-label="歌词延后（增大偏移）"
+            className="text-foreground hover:bg-foreground/20 rounded-full"
+            onPointerDown={handlePointerDown(step)}
+            onPointerUp={handlePointerEnd}
+            onPointerLeave={handlePointerEnd}
+            onPointerCancel={handlePointerEnd}
+            onKeyDown={handleKeyDown(step)}
+          >
+            <RiArrowUpSLine size={20} />
+          </IconButton>
+          <span className="text-foreground/80 text-xs font-bold whitespace-nowrap">{formatLabel(value)} ms</span>
+          <IconButton
+            size="sm"
+            variant="light"
+            aria-label="歌词提前（减小偏移）"
+            className="text-foreground hover:bg-foreground/20 rounded-full"
+            onPointerDown={handlePointerDown(-step)}
+            onPointerUp={handlePointerEnd}
+            onPointerLeave={handlePointerEnd}
+            onPointerCancel={handlePointerEnd}
+            onKeyDown={handleKeyDown(-step)}
+          >
+            <RiArrowDownSLine size={20} />
+          </IconButton>
+          <button
+            type="button"
+            aria-label="重置歌词偏移"
+            onClick={handleReset}
+            className="text-foreground/50 hover:text-foreground mt-1 rounded-full p-1 transition-colors"
+          >
+            <RiResetLeftLine size={14} />
+          </button>
         </div>
       </PopoverContent>
     </Popover>
