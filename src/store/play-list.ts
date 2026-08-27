@@ -213,6 +213,13 @@ const createAudio = (): HTMLAudioElement => {
 
 export const audio = createAudio();
 
+/** 播放出错/卡住时的最大自动恢复次数 */
+const MAX_AUDIO_ERROR_RETRY = 3;
+/** 播放卡住（数据迟迟不到）的判定时间（ms） */
+const STALL_TIMEOUT = 8000;
+let audioErrorRetryCount = 0;
+let stallTimerId: number | null = null;
+
 const updatePlaybackState = () => {
   if ("mediaSession" in navigator) {
     navigator.mediaSession.playbackState = audio.paused ? "paused" : "playing";
@@ -385,6 +392,85 @@ export const usePlayList = create<State & Action>()(
             audio.playbackRate = get().rate;
             audio.loop = get().playMode === PlayMode.Single;
 
+            const clearStallTimer = () => {
+              if (stallTimerId !== null) {
+                window.clearTimeout(stallTimerId);
+                stallTimerId = null;
+              }
+            };
+
+            const scheduleStallRecovery = () => {
+              // 数据迟迟不到视为卡住，超时后刷新播放链接恢复
+              clearStallTimer();
+              stallTimerId = window.setTimeout(() => {
+                const playItem = get().getPlayItem?.();
+                if (!playItem) return;
+                const position = audio.currentTime || 0;
+                log.warn("[播放恢复] 播放卡住，刷新链接", {
+                  title: playItem.title,
+                  position,
+                });
+                void (async () => {
+                  const refreshed = await refreshCurrentAudioSource();
+                  if (refreshed) {
+                    if (position > 0.5) {
+                      audio.currentTime = position;
+                    }
+                    await playAudioSafely();
+                  }
+                })();
+              }, STALL_TIMEOUT);
+            };
+
+            const handleAudioError = () => {
+              const playItem = get().getPlayItem?.();
+              if (!playItem) {
+                return;
+              }
+              if (audioErrorRetryCount >= MAX_AUDIO_ERROR_RETRY) {
+                audioErrorRetryCount = 0;
+                log.error("[播放恢复] 播放出错且多次重试仍未恢复", {
+                  title: playItem.title,
+                  errorCode: audio.error?.code,
+                });
+                handlePlayError(new Error("播放中断，多次重试仍未恢复"));
+                return;
+              }
+              audioErrorRetryCount += 1;
+              const position = audio.currentTime || 0;
+              const wasPlaying = !audio.paused;
+              log.warn("[播放恢复] 播放出错，刷新链接重试", {
+                title: playItem.title,
+                retry: audioErrorRetryCount,
+                position,
+                errorCode: audio.error?.code,
+              });
+              void (async () => {
+                const refreshed = await refreshCurrentAudioSource();
+                if (!refreshed) {
+                  audioErrorRetryCount = 0;
+                  return;
+                }
+                if (position > 0.5) {
+                  audio.currentTime = position;
+                }
+                if (wasPlaying) {
+                  await playAudioSafely();
+                } else {
+                  audioErrorRetryCount = 0;
+                }
+              })();
+            };
+
+            audio.onplaying = () => {
+              clearStallTimer();
+              audioErrorRetryCount = 0;
+            };
+
+            audio.onstalled = scheduleStallRecovery;
+            audio.onwaiting = scheduleStallRecovery;
+            audio.onerror = handleAudioError;
+
             audio.ondurationchange = () => {
               const dur = audio.duration;
               if (!Number.isNaN(dur) && dur !== Infinity) {
@@ -394,6 +480,7 @@ export const usePlayList = create<State & Action>()(
             };
 
             audio.ontimeupdate = () => {
+              clearStallTimer();
               const currentTime = Math.round(audio.currentTime * 100) / 100;
               usePlayProgress.getState().setCurrentTime(currentTime);
               const playItem = get().getPlayItem?.();
@@ -1142,6 +1229,7 @@ function resetAudioAndPlay(url: string) {
 // 切换歌曲时，更新当前播放的歌曲信息
 usePlayList.subscribe(async (state, prevState) => {
   if (state.playId !== prevState.playId) {
+    audioErrorRetryCount = 0;
     if (!state.playId) {
       const prevPlayItem = prevState.list.find(item => item.id === prevState.playId);
       if (shouldReportPlayRecord(prevPlayItem)) {
