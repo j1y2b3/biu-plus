@@ -492,12 +492,17 @@ export const usePlayList = create<State & Action>()(
                 } else {
                   audioErrorRetryCount = 0;
                 }
+                // 只有真正恢复（播放位置前进了）才重置重试计数，否则保持计数以触发上限，避免无限重试
+                window.setTimeout(() => {
+                  if (audio.currentTime > position + 2) {
+                    audioErrorRetryCount = 0;
+                  }
+                }, 3000);
               })();
             };
 
             audio.onplaying = () => {
               clearStallTimer();
-              audioErrorRetryCount = 0;
             };
 
             audio.onstalled = scheduleStallRecovery;
