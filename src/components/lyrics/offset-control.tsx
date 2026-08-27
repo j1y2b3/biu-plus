@@ -13,7 +13,8 @@ interface OffsetControlProps {
 }
 
 const DEFAULT_STEP = 100;
-const REPEAT_INTERVAL = 80; // 长按箭头时连续调整的间隔（ms）
+const LONG_PRESS_DELAY = 250; // 按住多久后开始连续调整（ms）
+const REPEAT_INTERVAL = 100; // 长按连发的间隔（ms）
 
 const formatLabel = (ms: number) => (ms >= 0 ? `+${ms}` : `${ms}`);
 
@@ -28,6 +29,7 @@ const OffsetControl = ({ value, step = DEFAULT_STEP, onChange, onOpenChange }: O
 
   const stopRepeat = useCallback(() => {
     if (repeatTimerRef.current !== null) {
+      window.clearTimeout(repeatTimerRef.current);
       window.clearInterval(repeatTimerRef.current);
       repeatTimerRef.current = null;
     }
@@ -47,7 +49,10 @@ const OffsetControl = ({ value, step = DEFAULT_STEP, onChange, onOpenChange }: O
   const startRepeat = useCallback(
     (delta: number) => {
       stopRepeat();
-      repeatTimerRef.current = window.setInterval(() => adjust(delta), REPEAT_INTERVAL);
+      // 先等一小段时间，按住超过 LONG_PRESS_DELAY 才开始连续调整，避免误触
+      repeatTimerRef.current = window.setTimeout(() => {
+        repeatTimerRef.current = window.setInterval(() => adjust(delta), REPEAT_INTERVAL);
+      }, LONG_PRESS_DELAY);
     },
     [adjust, stopRepeat],
   );
@@ -93,6 +98,7 @@ const OffsetControl = ({ value, step = DEFAULT_STEP, onChange, onOpenChange }: O
       placement="right"
       showArrow={false}
       shouldCloseOnBlur={false}
+      shouldCloseOnInteractOutside={false}
       disableAnimation
       offset={8}
       isOpen={open}
@@ -113,20 +119,6 @@ const OffsetControl = ({ value, step = DEFAULT_STEP, onChange, onOpenChange }: O
           <IconButton
             size="sm"
             variant="light"
-            aria-label="歌词延后（增大偏移）"
-            className="text-foreground hover:bg-foreground/20 rounded-full"
-            onPointerDown={handlePointerDown(step)}
-            onPointerUp={handlePointerEnd}
-            onPointerLeave={handlePointerEnd}
-            onPointerCancel={handlePointerEnd}
-            onKeyDown={handleKeyDown(step)}
-          >
-            <RiArrowUpSLine size={20} />
-          </IconButton>
-          <span className="text-foreground/80 text-xs font-bold whitespace-nowrap">{formatLabel(value)} ms</span>
-          <IconButton
-            size="sm"
-            variant="light"
             aria-label="歌词提前（减小偏移）"
             className="text-foreground hover:bg-foreground/20 rounded-full"
             onPointerDown={handlePointerDown(-step)}
@@ -134,6 +126,20 @@ const OffsetControl = ({ value, step = DEFAULT_STEP, onChange, onOpenChange }: O
             onPointerLeave={handlePointerEnd}
             onPointerCancel={handlePointerEnd}
             onKeyDown={handleKeyDown(-step)}
+          >
+            <RiArrowUpSLine size={20} />
+          </IconButton>
+          <span className="text-foreground/80 text-xs font-bold whitespace-nowrap">{formatLabel(value)} ms</span>
+          <IconButton
+            size="sm"
+            variant="light"
+            aria-label="歌词延后（增大偏移）"
+            className="text-foreground hover:bg-foreground/20 rounded-full"
+            onPointerDown={handlePointerDown(step)}
+            onPointerUp={handlePointerEnd}
+            onPointerLeave={handlePointerEnd}
+            onPointerCancel={handlePointerEnd}
+            onKeyDown={handleKeyDown(step)}
           >
             <RiArrowDownSLine size={20} />
           </IconButton>
