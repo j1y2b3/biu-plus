@@ -3,6 +3,7 @@ import React, { useMemo } from "react";
 import { RiApps2AddFill, RiApps2AddLine } from "@remixicon/react";
 
 import { DefaultMenuList } from "@/common/constants/menus";
+import useDynamicUpdateCount from "@/common/hooks/use-dynamic-update";
 import MenuGroup from "@/components/menu/menu-group";
 import { useSettings } from "@/store/settings";
 import { useUser } from "@/store/user";
@@ -15,11 +16,12 @@ interface Props {
 const DefaultMenus = ({ isCollapsed, onOpenAddFavorite }: Props) => {
   const user = useUser(state => state.user);
   const hiddenMenuKeys = useSettings(state => state.hiddenMenuKeys);
+  const { updateCount, reset } = useDynamicUpdateCount(Boolean(user?.isLogin));
 
   const items = useMemo(() => {
-    const filtered = DefaultMenuList.filter(item => (item.needLogin ? user?.isLogin : true)).filter(
-      item => item.href && !hiddenMenuKeys.includes(item.href),
-    );
+    const filtered = DefaultMenuList.filter(item => (item.needLogin ? user?.isLogin : true))
+      .filter(item => item.href && !hiddenMenuKeys.includes(item.href))
+      .map(item => (item.href === "/" ? { ...item, isDot: updateCount > 0, onPress: () => reset() } : item));
 
     if (isCollapsed) {
       return [
@@ -34,7 +36,7 @@ const DefaultMenus = ({ isCollapsed, onOpenAddFavorite }: Props) => {
     }
 
     return filtered;
-  }, [user?.isLogin, hiddenMenuKeys, isCollapsed, onOpenAddFavorite]);
+  }, [user?.isLogin, hiddenMenuKeys, isCollapsed, onOpenAddFavorite, updateCount, reset]);
 
   return <MenuGroup items={items} collapsed={isCollapsed} />;
 };

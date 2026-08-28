@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { useLocation, useParams } from "react-router";
 
-import { Avatar, Button, Link as HeroLink, Tooltip } from "@heroui/react";
+import { Avatar, Badge, Button, Link as HeroLink, Tooltip } from "@heroui/react";
 import clx from "classnames";
 import { twMerge } from "tailwind-merge";
 
@@ -18,6 +18,8 @@ export interface MenuItemProps {
   cover?: string;
   /** 激活状态图标 */
   activeIcon?: React.ComponentType<{ size?: number | string; className?: string }>;
+  /** 是否显示「有新动态」黄色圆点 */
+  isDot?: boolean;
   className?: string;
   onPress?: VoidFunction;
   collapsed?: boolean;
@@ -32,6 +34,7 @@ const MenuItem: React.FC<MenuItemProps> = ({
   cover,
   icon: Icon,
   activeIcon: ActiveIcon,
+  isDot,
   className,
   onPress,
   collapsed,
@@ -89,7 +92,21 @@ const MenuItem: React.FC<MenuItemProps> = ({
           })}
           {...(dndRest as any)}
         >
-          {iconContent}
+          {isDot ? (
+            <Badge
+              isDot
+              color="warning"
+              shape="circle"
+              content=""
+              size="sm"
+              variant="solid"
+              className="translate-x-1/3 -translate-y-1/3"
+            >
+              {iconContent}
+            </Badge>
+          ) : (
+            iconContent
+          )}
         </Button>
       </Tooltip>
     );
@@ -109,6 +126,7 @@ const MenuItem: React.FC<MenuItemProps> = ({
       {...(dndRest as any)}
     >
       <span className="pointer-events-none truncate">{title}</span>
+      {isDot && <span className="bg-warning ml-2 h-2 w-2 flex-none rounded-full" />}
     </Button>
   );
 };
