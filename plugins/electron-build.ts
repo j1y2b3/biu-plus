@@ -80,8 +80,8 @@ export async function buildElectron() {
       },
       publish: {
         provider: "github",
-        owner: "wood3n",
-        repo: "biu",
+        owner: "j1y2b3",
+        repo: "biu-plus",
         releaseType: null,
       },
     },
