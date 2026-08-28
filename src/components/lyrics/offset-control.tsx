@@ -12,9 +12,9 @@ interface OffsetControlProps {
   onOpenChange?: (open: boolean) => void;
 }
 
-const DEFAULT_STEP = 100;
+const DEFAULT_STEP = 500;
 const LONG_PRESS_DELAY = 250; // 按住多久后开始连续调整（ms）
-const REPEAT_INTERVAL = 100; // 长按连发的间隔（ms）
+const REPEAT_INTERVAL = 250; // 长按连发的间隔（ms）
 
 const formatLabel = (ms: number) => (ms >= 0 ? `+${ms}` : `${ms}`);
 
