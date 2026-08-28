@@ -8,7 +8,7 @@
 > 本 fork 的修改部分版权归 **Jin Yubin** © 2026。
 
 > [!NOTE]
-> 本改版的功能改动均由 **AI（GitHub Copilot）（DeepSeek v4 flash）** 编写完成，包括多P播放、歌词偏移、播放稳定性、封面与 UI 修复等。🤖
+> 本改版的功能改动均由 **AI（GitHub Copilot）（DeepSeek v4 flash）** 编写完成。🤖
 
 <p align="center">
   <img src="./screenshots/logo.svg" alt="Biu logo" width="120" />
