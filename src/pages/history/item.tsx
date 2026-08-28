@@ -1,13 +1,15 @@
-import type { ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 
 import { Button } from "@heroui/react";
+import { RiScissorsLine } from "@remixicon/react";
 import clx from "classnames";
 
 import { formatDuration } from "@/common/utils/time";
 import ContextMenu, { type ContextMenuItem } from "@/components/context-menu";
 import Image from "@/components/image";
 import OperationMenu from "@/components/music-list-item/operation";
+import SongTrimModal, { type SongTrimModalTarget } from "@/components/song-trim-modal";
 import { isSame, usePlayList } from "@/store/play-list";
 
 interface Props {
@@ -57,51 +59,97 @@ const HistoryListItem = ({
     return `${p} / ${d}`;
   };
 
-  return (
-    <ContextMenu items={menus} onAction={onMenuAction}>
-      <Button
-        as="div"
-        fullWidth
-        disableAnimation
-        variant={isPlay ? "flat" : "light"}
-        color={isPlay ? "primary" : "default"}
-        onDoubleClick={onPress}
-        className={clx(
-          "group flex w-full items-center justify-between rounded-md",
-          isCompact ? "h-9 min-h-9 min-w-0 px-0 text-sm" : "h-auto min-h-auto min-w-auto space-y-2 p-2",
-        )}
-      >
-        <div className={clx("grid w-full items-center gap-4", gridCols)}>
-          {/* 1. # */}
-          <div className="text-foreground-500 text-center text-xs tabular-nums">{index}</div>
+  // 单曲裁剪：有 bvid 的条目支持设置跳过开头/结尾
+  const canTrim = Boolean(bvid);
+  const [trimTarget, setTrimTarget] = useState<SongTrimModalTarget | null>(null);
 
-          {/* 2. Title (Cover + Title) */}
-          <div className="flex min-w-0 items-center overflow-hidden">
-            {!isCompact && (
-              <div className="relative h-12 w-12 flex-none">
-                <Image
-                  removeWrapper
-                  radius="md"
-                  src={cover}
-                  width="100%"
-                  height="100%"
-                  className="m-0"
-                  params="760w_428h_1c.avif"
-                />
-              </div>
-            )}
-            <div className={clx("flex min-w-0 flex-col items-start justify-center space-y-1", { "ml-2": !isCompact })}>
-              <span
-                className={clx("w-full truncate text-left text-sm font-medium", {
-                  "text-primary": isPlay,
-                })}
-                title={typeof title === "string" ? title : undefined}
-              >
-                {title}
-              </span>
+  const allMenus = useMemo<ContextMenuItem[]>(() => {
+    if (!canTrim) return menus;
+    return [
+      ...menus,
+      {
+        key: "trim",
+        label: "单曲裁剪",
+        icon: <RiScissorsLine size={18} />,
+      },
+    ];
+  }, [menus, canTrim]);
+
+  const handleMenuAction = (key: string) => {
+    if (key === "trim") {
+      setTrimTarget({ type, bvid, title: typeof title === "string" ? title : String(title) });
+      return;
+    }
+    onMenuAction?.(key);
+  };
+
+  return (
+    <>
+      <ContextMenu items={allMenus} onAction={handleMenuAction}>
+        <Button
+          as="div"
+          fullWidth
+          disableAnimation
+          variant={isPlay ? "flat" : "light"}
+          color={isPlay ? "primary" : "default"}
+          onDoubleClick={onPress}
+          className={clx(
+            "group flex w-full items-center justify-between rounded-md",
+            isCompact ? "h-9 min-h-9 min-w-0 px-0 text-sm" : "h-auto min-h-auto min-w-auto space-y-2 p-2",
+          )}
+        >
+          <div className={clx("grid w-full items-center gap-4", gridCols)}>
+            {/* 1. # */}
+            <div className="text-foreground-500 text-center text-xs tabular-nums">{index}</div>
+
+            {/* 2. Title (Cover + Title) */}
+            <div className="flex min-w-0 items-center overflow-hidden">
               {!isCompact && (
+                <div className="relative h-12 w-12 flex-none">
+                  <Image
+                    removeWrapper
+                    radius="md"
+                    src={cover}
+                    width="100%"
+                    height="100%"
+                    className="m-0"
+                    params="760w_428h_1c.avif"
+                  />
+                </div>
+              )}
+              <div
+                className={clx("flex min-w-0 flex-col items-start justify-center space-y-1", { "ml-2": !isCompact })}
+              >
                 <span
-                  className={clx("text-foreground-500 w-fit truncate text-xs", {
+                  className={clx("w-full truncate text-left text-sm font-medium", {
+                    "text-primary": isPlay,
+                  })}
+                  title={typeof title === "string" ? title : undefined}
+                >
+                  {title}
+                </span>
+                {!isCompact && (
+                  <span
+                    className={clx("text-foreground-500 w-fit truncate text-xs", {
+                      "cursor-pointer hover:underline": Boolean(upMid),
+                    })}
+                    onClick={e => {
+                      e.stopPropagation();
+                      if (!upMid) return;
+                      navigate(`/user/${upMid}`);
+                    }}
+                  >
+                    {upName || "未知"}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* 3. UP (Compact only) */}
+            {isCompact && (
+              <div className="min-w-0 truncate text-left">
+                <span
+                  className={clx("text-foreground-500 w-fit truncate text-sm", {
                     "cursor-pointer hover:underline": Boolean(upMid),
                   })}
                   onClick={e => {
@@ -112,43 +160,26 @@ const HistoryListItem = ({
                 >
                   {upName || "未知"}
                 </span>
-              )}
+              </div>
+            )}
+
+            {/* 4. Progress/Duration */}
+            <div className="text-foreground-500 text-right text-xs tabular-nums">
+              {formatProgress(progress, duration)}
+            </div>
+
+            {/* 5. View Time */}
+            <div className="text-foreground-500 text-right text-xs">{viewAt}</div>
+
+            {/* 6. Actions */}
+            <div className="flex h-full items-center justify-end">
+              <OperationMenu items={allMenus} onAction={handleMenuAction} />
             </div>
           </div>
-
-          {/* 3. UP (Compact only) */}
-          {isCompact && (
-            <div className="min-w-0 truncate text-left">
-              <span
-                className={clx("text-foreground-500 w-fit truncate text-sm", {
-                  "cursor-pointer hover:underline": Boolean(upMid),
-                })}
-                onClick={e => {
-                  e.stopPropagation();
-                  if (!upMid) return;
-                  navigate(`/user/${upMid}`);
-                }}
-              >
-                {upName || "未知"}
-              </span>
-            </div>
-          )}
-
-          {/* 4. Progress/Duration */}
-          <div className="text-foreground-500 text-right text-xs tabular-nums">
-            {formatProgress(progress, duration)}
-          </div>
-
-          {/* 5. View Time */}
-          <div className="text-foreground-500 text-right text-xs">{viewAt}</div>
-
-          {/* 6. Actions */}
-          <div className="flex h-full items-center justify-end">
-            <OperationMenu items={menus} onAction={onMenuAction} />
-          </div>
-        </div>
-      </Button>
-    </ContextMenu>
+        </Button>
+      </ContextMenu>
+      <SongTrimModal target={trimTarget} onClose={() => setTrimTarget(null)} />
+    </>
   );
 };
 

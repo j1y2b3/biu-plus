@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 
 import { addToast, Drawer, DrawerBody, DrawerContent, DrawerHeader } from "@heroui/react";
 import { RiDeleteBinLine, RiFocus3Line } from "@remixicon/react";
@@ -6,6 +6,7 @@ import { uniqBy } from "es-toolkit/array";
 
 import { openBiliVideoLink } from "@/common/utils/url";
 import { type ScrollRefObject } from "@/components/scroll-container";
+import SongTrimModal, { type SongTrimModalTarget } from "@/components/song-trim-modal";
 import { VirtualList } from "@/components/virtual-list";
 import { useModalStore } from "@/store/modal";
 import { isSame, usePlayList, type PlayData } from "@/store/play-list";
@@ -19,6 +20,7 @@ const RowHeight = 64;
 
 const PlayListDrawer = () => {
   const scrollRef = useRef<ScrollRefObject | null>(null);
+  const [trimTarget, setTrimTarget] = useState<SongTrimModalTarget | null>(null);
   const isOpen = useModalStore(s => s.isPlayListDrawerOpen);
   const setOpen = useModalStore(s => s.setPlayListDrawerOpen);
   const list = usePlayList(s => s.list);
@@ -71,6 +73,9 @@ const PlayListDrawer = () => {
       case "bililink":
         openBiliVideoLink(item);
         break;
+      case "trim":
+        setTrimTarget(item);
+        break;
       case "del":
         usePlayList.getState().del(item.id);
         break;
@@ -111,63 +116,66 @@ const PlayListDrawer = () => {
   }, [playItem, pureList]);
 
   return (
-    <Drawer
-      radius="md"
-      shadow="md"
-      backdrop="transparent"
-      size="sm"
-      hideCloseButton
-      disableAnimation
-      isOpen={isOpen}
-      onOpenChange={setOpen}
-      classNames={{
-        backdrop: "z-200 window-no-drag",
-        wrapper: "z-200 window-no-drag",
-        base: "data-[placement=right]:mb-22",
-      }}
-    >
-      <DrawerContent>
-        <DrawerHeader className="border-divider/40 flex flex-row items-center justify-between space-x-2 border-b px-4 py-3">
-          <h3>
-            播放列表<span className="text-default-500 text-sm">({pureList?.length || 0})</span>
-          </h3>
-          <div className="flex items-center">
-            {Boolean(pureList?.length) && (
-              <>
-                <IconButton tooltip="定位当前播放" onPress={scrollToPlayItem}>
-                  <RiFocus3Line size={16} />
-                </IconButton>
-                <IconButton tooltip="清空播放列表" onPress={clear} className="hover:text-danger">
-                  <RiDeleteBinLine size={16} />
-                </IconButton>
-              </>
-            )}
-          </div>
-        </DrawerHeader>
-        {list.length ? (
-          <DrawerBody className="overflow-hidden px-0">
-            <VirtualList
-              className="h-full w-full px-2"
-              scrollRef={scrollRef}
-              data={pureList}
-              itemHeight={RowHeight}
-              renderItem={item => (
-                <ListItem
-                  data={item}
-                  isLogin={Boolean(user?.isLogin)}
-                  isPlaying={playItem?.source === "local" ? playItem?.id === item.id : isSame(playItem, item)}
-                  onClose={() => setOpen(false)}
-                  onPress={() => playListItem(item.id)}
-                  onAction={key => handleAction(key, item)}
-                />
+    <>
+      <Drawer
+        radius="md"
+        shadow="md"
+        backdrop="transparent"
+        size="sm"
+        hideCloseButton
+        disableAnimation
+        isOpen={isOpen}
+        onOpenChange={setOpen}
+        classNames={{
+          backdrop: "z-200 window-no-drag",
+          wrapper: "z-200 window-no-drag",
+          base: "data-[placement=right]:mb-22",
+        }}
+      >
+        <DrawerContent>
+          <DrawerHeader className="border-divider/40 flex flex-row items-center justify-between space-x-2 border-b px-4 py-3">
+            <h3>
+              播放列表<span className="text-default-500 text-sm">({pureList?.length || 0})</span>
+            </h3>
+            <div className="flex items-center">
+              {Boolean(pureList?.length) && (
+                <>
+                  <IconButton tooltip="定位当前播放" onPress={scrollToPlayItem}>
+                    <RiFocus3Line size={16} />
+                  </IconButton>
+                  <IconButton tooltip="清空播放列表" onPress={clear} className="hover:text-danger">
+                    <RiDeleteBinLine size={16} />
+                  </IconButton>
+                </>
               )}
-            />
-          </DrawerBody>
-        ) : (
-          <Empty />
-        )}
-      </DrawerContent>
-    </Drawer>
+            </div>
+          </DrawerHeader>
+          {list.length ? (
+            <DrawerBody className="overflow-hidden px-0">
+              <VirtualList
+                className="h-full w-full px-2"
+                scrollRef={scrollRef}
+                data={pureList}
+                itemHeight={RowHeight}
+                renderItem={item => (
+                  <ListItem
+                    data={item}
+                    isLogin={Boolean(user?.isLogin)}
+                    isPlaying={playItem?.source === "local" ? playItem?.id === item.id : isSame(playItem, item)}
+                    onClose={() => setOpen(false)}
+                    onPress={() => playListItem(item.id)}
+                    onAction={key => handleAction(key, item)}
+                  />
+                )}
+              />
+            </DrawerBody>
+          ) : (
+            <Empty />
+          )}
+        </DrawerContent>
+      </Drawer>
+      <SongTrimModal target={trimTarget} onClose={() => setTrimTarget(null)} />
+    </>
   );
 };
 

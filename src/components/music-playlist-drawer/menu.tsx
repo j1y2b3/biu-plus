@@ -1,4 +1,11 @@
-import { RiDeleteBinLine, RiExternalLinkLine, RiFileMusicLine, RiFileVideoLine, RiStarLine } from "@remixicon/react";
+import {
+  RiDeleteBinLine,
+  RiExternalLinkLine,
+  RiFileMusicLine,
+  RiFileVideoLine,
+  RiScissorsLine,
+  RiStarLine,
+} from "@remixicon/react";
 
 export const getMenus = ({ isLogin, isLocal }: { isLogin: boolean; isLocal: boolean }) =>
   [
@@ -19,6 +26,11 @@ export const getMenus = ({ isLogin, isLocal }: { isLogin: boolean; isLocal: bool
       key: "download-video",
       label: "下载视频",
       hidden: isLocal,
+    },
+    {
+      key: "trim",
+      label: "单曲裁剪",
+      icon: <RiScissorsLine size={18} />,
     },
     {
       key: "bililink",

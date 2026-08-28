@@ -1,12 +1,20 @@
 import React from "react";
 
 import { Button } from "@heroui/react";
-import { RiDeleteBinLine, RiFileMusicLine, RiPlayCircleLine, RiPlayFill, RiPlayListAddLine } from "@remixicon/react";
+import {
+  RiDeleteBinLine,
+  RiFileMusicLine,
+  RiPlayCircleLine,
+  RiPlayFill,
+  RiPlayListAddLine,
+  RiScissorsLine,
+} from "@remixicon/react";
 import clsx from "classnames";
 import { filesize } from "filesize";
 
 import { formatDuration, formatMillisecond } from "@/common/utils/time";
 import ContextMenu from "@/components/context-menu";
+import SongTrimModal, { type SongTrimModalTarget } from "@/components/song-trim-modal";
 
 import OperationMenu, { type LocalOperationItem } from "./operation";
 
@@ -25,6 +33,7 @@ const menus: LocalOperationItem[] = [
   { key: "nextplay", label: "下一首播放", icon: <RiPlayCircleLine size={18} /> },
   { key: "play", label: "添加到播放列表", icon: <RiPlayListAddLine size={18} /> },
   { key: "open", label: "打开文件", icon: <RiFileMusicLine size={18} /> },
+  { key: "trim", label: "单曲裁剪", icon: <RiScissorsLine size={18} /> },
   { key: "delete", label: "删除文件", color: "danger", className: "text-danger", icon: <RiDeleteBinLine size={18} /> },
 ];
 
@@ -39,64 +48,69 @@ const LocalMusicItemRow = ({
   onDelete,
 }: Props) => {
   const [isOpOpen, setIsOpOpen] = React.useState(false);
+  const [trimTarget, setTrimTarget] = React.useState<SongTrimModalTarget | null>(null);
   const items = isPlaying ? menus.filter(m => m.key !== "delete") : menus;
 
   const onAction = (key: string) => {
     if (key === "nextplay") onAddToNext();
     if (key === "play") onAddToPlayList();
     if (key === "open") onOpen();
+    if (key === "trim") setTrimTarget({ source: "local", id: data.id, title: data.title });
     if (key === "delete") onDelete();
   };
 
   return (
-    <ContextMenu items={items} onAction={onAction} contentClassName="w-[160px]" disabled={isOpOpen}>
-      <Button
-        as="div"
-        radius="md"
-        fullWidth
-        disableAnimation
-        color={isPlaying ? "primary" : "default"}
-        variant={isPlaying ? "flat" : "light"}
-        onDoubleClick={() => onPlay()}
-        className="group flex w-full items-center justify-between rounded-md p-2"
-      >
-        <div className="grid w-full grid-cols-[40px_minmax(0,1fr)_100px_100px_100px_100px_40px] items-center gap-4">
-          <div className="text-foreground-500 min-w-8 text-center text-xs tabular-nums">
-            <span
-              className={clsx({
-                "group-hover:hidden": !isPlaying,
-              })}
-            >
-              {index}
-            </span>
-            {!isPlaying && <RiPlayFill size={16} className="hidden align-middle group-hover:inline" />}
-          </div>
-          <div className="min-w-0 truncate">{data.title}</div>
-          <div className="text-foreground-500 flex justify-end text-xs tabular-nums">{filesize(data.size)}</div>
-          <div className="text-foreground-500 flex justify-end text-xs">{data.format?.toUpperCase() || "-"}</div>
-          <div className="text-foreground-500 flex justify-end text-xs tabular-nums">
-            {typeof data.duration === "number" ? formatDuration(Math.round(data.duration)) : "-"}
-          </div>
-          <div className="text-foreground-500 flex justify-end text-xs">
-            {data.createdTime ? formatMillisecond(data.createdTime) : "-"}
-          </div>
-          <div
-            className="flex h-full items-center justify-end"
-            onClick={e => {
-              e.stopPropagation();
-            }}
-          >
-            <OperationMenu
-              items={items}
-              onOpenChange={open => {
-                setIsOpOpen(open);
+    <>
+      <ContextMenu items={items} onAction={onAction} contentClassName="w-[160px]" disabled={isOpOpen}>
+        <Button
+          as="div"
+          radius="md"
+          fullWidth
+          disableAnimation
+          color={isPlaying ? "primary" : "default"}
+          variant={isPlaying ? "flat" : "light"}
+          onDoubleClick={() => onPlay()}
+          className="group flex w-full items-center justify-between rounded-md p-2"
+        >
+          <div className="grid w-full grid-cols-[40px_minmax(0,1fr)_100px_100px_100px_100px_40px] items-center gap-4">
+            <div className="text-foreground-500 min-w-8 text-center text-xs tabular-nums">
+              <span
+                className={clsx({
+                  "group-hover:hidden": !isPlaying,
+                })}
+              >
+                {index}
+              </span>
+              {!isPlaying && <RiPlayFill size={16} className="hidden align-middle group-hover:inline" />}
+            </div>
+            <div className="min-w-0 truncate">{data.title}</div>
+            <div className="text-foreground-500 flex justify-end text-xs tabular-nums">{filesize(data.size)}</div>
+            <div className="text-foreground-500 flex justify-end text-xs">{data.format?.toUpperCase() || "-"}</div>
+            <div className="text-foreground-500 flex justify-end text-xs tabular-nums">
+              {typeof data.duration === "number" ? formatDuration(Math.round(data.duration)) : "-"}
+            </div>
+            <div className="text-foreground-500 flex justify-end text-xs">
+              {data.createdTime ? formatMillisecond(data.createdTime) : "-"}
+            </div>
+            <div
+              className="flex h-full items-center justify-end"
+              onClick={e => {
+                e.stopPropagation();
               }}
-              onAction={onAction}
-            />
+            >
+              <OperationMenu
+                items={items}
+                onOpenChange={open => {
+                  setIsOpOpen(open);
+                }}
+                onAction={onAction}
+              />
+            </div>
           </div>
-        </div>
-      </Button>
-    </ContextMenu>
+        </Button>
+      </ContextMenu>
+      <SongTrimModal target={trimTarget} onClose={() => setTrimTarget(null)} />
+    </>
   );
 };
 export default LocalMusicItemRow;

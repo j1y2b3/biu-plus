@@ -16,6 +16,7 @@ import { getAudioSongInfo } from "@/service/audio-song-info";
 import { getWebInterfaceView } from "@/service/web-interface-view";
 
 import { usePlayProgress } from "./play-progress";
+import { useSongTrim } from "./song-trim";
 
 export type PlayDataType = "mv" | "audio";
 
@@ -517,6 +518,23 @@ export const usePlayList = create<State & Action>()(
               }
             };
 
+            const handleTrackEnd = () => {
+              const playItem = get().getPlayItem?.();
+              if (shouldReportPlayRecord(playItem)) {
+                void reportHeartbeat(playItem, audio.duration, audio.duration, 4);
+                endPlayReport();
+              }
+
+              const currentIndex = get().list.findIndex(item => item.id === get().playId);
+              if (get().playMode === PlayMode.Sequence && currentIndex === get().list.length - 1) {
+                audio.currentTime = 0;
+                audio.pause();
+                return;
+              }
+
+              get().next();
+            };
+
             audio.ontimeupdate = () => {
               clearStallTimer();
               const currentTime = Math.round(audio.currentTime * 100) / 100;
@@ -524,6 +542,20 @@ export const usePlayList = create<State & Action>()(
               const playItem = get().getPlayItem?.();
               if (shouldReportPlayRecord(playItem)) {
                 void reportHeartbeat(playItem, currentTime, audio.duration, 0);
+              }
+
+              // 单曲裁剪：到达裁剪后的结尾时视为播完
+              const trim = useSongTrim.getState().getTrim(playItem);
+              if (
+                trim.end > 0 &&
+                Number.isFinite(audio.duration) &&
+                audio.currentTime >= audio.duration - trim.end - 0.2
+              ) {
+                if (get().playMode === PlayMode.Single) {
+                  audio.currentTime = trim.start > 0 ? trim.start : 0;
+                  return;
+                }
+                handleTrackEnd();
               }
             };
 
@@ -559,21 +591,7 @@ export const usePlayList = create<State & Action>()(
               if (get().playMode === PlayMode.Single) {
                 return;
               }
-
-              const playItem = get().getPlayItem?.();
-              if (shouldReportPlayRecord(playItem)) {
-                void reportHeartbeat(playItem, audio.duration, audio.duration, 4);
-                endPlayReport();
-              }
-
-              const currentIndex = get().list.findIndex(item => item.id === get().playId);
-              if (get().playMode === PlayMode.Sequence && currentIndex === get().list.length - 1) {
-                audio.currentTime = 0;
-                audio.pause();
-                return;
-              }
-
-              get().next();
+              handleTrackEnd();
             };
 
             if ("mediaSession" in navigator) {
@@ -654,9 +672,13 @@ export const usePlayList = create<State & Action>()(
           });
         },
         seek: s => {
-          usePlayProgress.getState().setCurrentTime(s);
+          const playItem = get().getPlayItem();
+          const trim = useSongTrim.getState().getTrim(playItem);
+          const end = Number.isFinite(audio.duration) ? audio.duration - trim.end : s;
+          const clamped = Math.min(Math.max(s, trim.start), end);
+          usePlayProgress.getState().setCurrentTime(clamped);
           if (audio) {
-            audio.currentTime = s;
+            audio.currentTime = clamped;
           }
         },
         togglePlay: async () => {
@@ -1261,6 +1283,20 @@ function resetAudioAndPlay(url: string) {
   audio.src = url;
   audio.currentTime = 0;
   audio.load();
+
+  // 单曲裁剪：从头跳过指定秒数（等可播放后再定位到裁剪起点）
+  const playItem = usePlayList.getState().getPlayItem?.();
+  const trim = useSongTrim.getState().getTrim(playItem);
+  if (trim.start > 0) {
+    const onCanPlay = () => {
+      audio.removeEventListener("canplay", onCanPlay);
+      if (audio.currentTime < trim.start) {
+        audio.currentTime = trim.start;
+      }
+    };
+    audio.addEventListener("canplay", onCanPlay);
+  }
+
   void playAudioSafely();
 }
 
