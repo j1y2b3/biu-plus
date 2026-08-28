@@ -220,6 +220,10 @@ const MAX_AUDIO_ERROR_RETRY = 3;
 const STALL_TIMEOUT = 8000;
 let audioErrorRetryCount = 0;
 let stallTimerId: number | null = null;
+/** 下一首预取缓存：{ 播放项 id, 预取的音频链接 } */
+let nextPrefetch: { id: string; audioUrl: string } | null = null;
+/** 用于预载下一首数据的隐藏 audio（不播放，仅预热 CDN/HTTP 缓存） */
+let preloadAudio: HTMLAudioElement | null = null;
 
 /** 获取播放链接失败时的最大重试次数 */
 const AUDIO_FETCH_RETRY = 2;
@@ -303,6 +307,19 @@ export const usePlayList = create<State & Action>()(
       const ensureAudioSrcValid = async () => {
         const { playId, list } = get();
         const currentPlayItem = list.find(item => item.id === playId);
+        // 命中下一首预取缓存：直接复用预取的链接，跳过网络请求
+        if (nextPrefetch && currentPlayItem?.id === nextPrefetch.id && isUrlValid(nextPrefetch.audioUrl)) {
+          const prefetchedUrl = nextPrefetch.audioUrl;
+          nextPrefetch = null;
+          if (audio.src !== prefetchedUrl) {
+            audio.src = prefetchedUrl;
+          }
+          const currentTime = usePlayProgress.getState().currentTime;
+          if (typeof currentTime === "number" && currentTime > 0) {
+            audio.currentTime = currentTime;
+          }
+          return;
+        }
         if (currentPlayItem?.source === "local" && currentPlayItem?.audioUrl) {
           if (audio.src !== currentPlayItem.audioUrl) {
             audio.src = currentPlayItem.audioUrl;
@@ -890,27 +907,7 @@ export const usePlayList = create<State & Action>()(
           const currentIndex = list.findIndex(item => item.id === playId);
           // 计算“下一首”索引：默认跳过同一多P视频中未手动添加的分P（如伴奏），
           // 避免旧的展开结果/持久化残留导致自动连播
-          const nextIndex = (() => {
-            const currentItem = list[currentIndex];
-            const total = list.length;
-            let index = (currentIndex + 1) % total;
-            let guard = 0;
-            while (guard < total) {
-              const candidate = list[index];
-              const isUnaddedPage =
-                currentItem?.type === "mv" &&
-                candidate?.type === "mv" &&
-                candidate.bvid === currentItem.bvid &&
-                candidate.cid !== currentItem.cid &&
-                !candidate.manuallyAdded;
-              if (!isUnaddedPage) {
-                return index;
-              }
-              index = (index + 1) % total;
-              guard += 1;
-            }
-            return (currentIndex + 1) % total;
-          })();
+          const nextIndex = resolveNextIndex(list, playId);
           switch (playMode) {
             case PlayMode.Sequence:
             case PlayMode.Single:
@@ -1228,6 +1225,100 @@ export const usePlayList = create<State & Action>()(
   ),
 );
 
+/**
+ * 计算“下一首”的列表索引：默认跳过同一多P视频中未手动添加的分P（如伴奏），
+ * 避免旧的展开结果/持久化残留导致自动连播。
+ */
+const resolveNextIndex = (list: PlayData[], playId: string | undefined): number => {
+  const currentIndex = list.findIndex(item => item.id === playId);
+  if (currentIndex === -1) return 0;
+  const currentItem = list[currentIndex];
+  const total = list.length;
+  let index = (currentIndex + 1) % total;
+  let guard = 0;
+  while (guard < total) {
+    const candidate = list[index];
+    const isUnaddedPage =
+      currentItem?.type === "mv" &&
+      candidate?.type === "mv" &&
+      candidate.bvid === currentItem.bvid &&
+      candidate.cid !== currentItem.cid &&
+      !candidate.manuallyAdded;
+    if (!isUnaddedPage) {
+      return index;
+    }
+    index = (index + 1) % total;
+    guard += 1;
+  }
+  return (currentIndex + 1) % total;
+};
+
+/**
+ * 预取下一首的音频链接，并用隐藏 audio 预热数据；切歌时命中缓存直接复用，
+ * 减少“切歌时才获取链接/拉流”带来的延迟与失败。
+ */
+const prefetchNextAudio = async () => {
+  try {
+    const { playMode, list, playId, nextId } = usePlayList.getState();
+    if (!list?.length || !playId) {
+      nextPrefetch = null;
+      return;
+    }
+    // 单曲循环 / 随机播放（无法预判下一首）/ 列表只有一首：不预取
+    if (playMode === PlayMode.Single || playMode === PlayMode.Random || list.length <= 1) {
+      nextPrefetch = null;
+      return;
+    }
+
+    let nextItem: PlayData | undefined;
+    if (nextId) {
+      nextItem = list.find(item => item.id === nextId);
+    } else {
+      nextItem = list[resolveNextIndex(list, playId)];
+    }
+    if (!nextItem || nextItem.id === playId) {
+      nextPrefetch = null;
+      return;
+    }
+
+    // 本地音乐：本地路径立即可用，无需预取
+    if (nextItem.source === "local" && nextItem.audioUrl) {
+      nextPrefetch = { id: nextItem.id, audioUrl: nextItem.audioUrl };
+      return;
+    }
+
+    let audioUrl: string | undefined;
+    if (nextItem.type === "mv" && nextItem.bvid && nextItem.cid) {
+      const data = await getDashUrl(nextItem.bvid, nextItem.cid);
+      audioUrl = data?.audioUrl;
+    } else if (nextItem.type === "audio" && nextItem.sid) {
+      const data = await getAudioUrl(nextItem.sid);
+      audioUrl = data?.audioUrl;
+    }
+
+    if (!audioUrl) {
+      nextPrefetch = null;
+      return;
+    }
+
+    nextPrefetch = { id: nextItem.id, audioUrl };
+    log.info("[预载] 已预取下一首", { title: nextItem.title });
+    // 数据预载：用隐藏 audio 预载，切歌时命中 HTTP 缓存快速起播
+    try {
+      if (!preloadAudio) {
+        preloadAudio = new Audio();
+        preloadAudio.preload = "auto";
+      }
+      preloadAudio.src = audioUrl;
+      void preloadAudio.load();
+    } catch {
+      // 预载失败不影响切歌（会走正常加载/恢复逻辑）
+    }
+  } catch {
+    nextPrefetch = null;
+  }
+};
+
 async function refreshCurrentAudioSource(): Promise<boolean> {
   const { getPlayItem } = usePlayList.getState?.() ?? {};
   const playItem = getPlayItem?.();
@@ -1325,10 +1416,32 @@ usePlayList.subscribe(async (state, prevState) => {
       }
       if (playItem?.source === "local" && playItem?.audioUrl && audio.paused) {
         resetAudioAndPlay(playItem.audioUrl);
+        void prefetchNextAudio();
         return;
       }
       if (isUrlValid(playItem?.audioUrl) && audio.paused) {
         resetAudioAndPlay(playItem.audioUrl);
+        void prefetchNextAudio();
+        return;
+      }
+
+      // 命中下一首预取缓存：直接使用预取的链接，跳过获取播放链接
+      if (nextPrefetch && playItem?.id === nextPrefetch.id && isUrlValid(nextPrefetch.audioUrl)) {
+        const prefetchedUrl = nextPrefetch.audioUrl;
+        nextPrefetch = null;
+        resetAudioAndPlay(prefetchedUrl);
+        updateMediaSession({
+          title: playItem.pageTitle || playItem.title,
+          artist: playItem.ownerName,
+          cover: playItem.pageCover || playItem.cover,
+        });
+        usePlayList.setState(state => {
+          const listItem = state.list.find(item => item.id === state.playId);
+          if (listItem) {
+            listItem.audioUrl = prefetchedUrl;
+          }
+        });
+        void prefetchNextAudio();
         return;
       }
 
@@ -1444,6 +1557,9 @@ usePlayList.subscribe(async (state, prevState) => {
           toastError("无法获取音频播放链接");
         }
       }
+
+      // 当前歌曲已加载/尝试完毕，预取下一首音频
+      void prefetchNextAudio();
     }
   }
 });
