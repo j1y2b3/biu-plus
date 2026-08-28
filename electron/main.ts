@@ -59,6 +59,8 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       devTools: isDev,
+      // 窗口隐藏到托盘时不禁用后台节流，否则后台播放会被暂停
+      backgroundThrottling: false,
     },
   });
 
